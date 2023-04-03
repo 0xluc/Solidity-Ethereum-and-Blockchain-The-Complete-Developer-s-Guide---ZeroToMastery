@@ -1,4 +1,4 @@
-pragma solidity 0.8.11;
+pragma solidity 0.8.18;
 
 contract ERC20 {
     uint256 public totalSupply;
@@ -11,6 +11,7 @@ contract ERC20 {
     constructor(string memory _name, string memory _symbol){
         name = _name;
         symbol = _symbol;
+        _mint(msg.sender, 100e18);
     }
 
     function decimals() external pure returns (uint8) {
@@ -41,5 +42,10 @@ contract ERC20 {
         balanceOf[sender] = senderBalance - amount;
         balanceOf[recipient] += amount; 
         return true;
+    }
+    function _mint(address to, uint amount) internal {
+        require(to != address(0), "ERC20: mint to the zero address");
+        totalSupply += amount;
+        balanceOf[to] += amount;
     }
 }

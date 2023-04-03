@@ -4,6 +4,9 @@ contract ERC20 {
     uint256 public totalSupply;
     string public name;
     string public symbol;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
     
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address=> uint256)) public allowance;
@@ -25,6 +28,7 @@ contract ERC20 {
         uint currentAllowance = allowance[sender][msg.sender];
         require(currentAllowance >= amount, "ERC20: transfer amount exceds allowance");
         allowance[sender][msg.sender] = currentAllowance - amount;
+        emit Approval(sender, msg.sender, allowance[sender][msg.sender]);
         return _transfer(sender, recipient, amount);
     }
 
@@ -32,6 +36,7 @@ contract ERC20 {
         require(spender != address(0), "ERC20: cant approve to the zero address");
         allowance[msg.sender][spender] = amount;
 
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 
@@ -41,11 +46,16 @@ contract ERC20 {
         require(senderBalance >=  amount, "ERC20: transfer amount exceeds balance");
         balanceOf[sender] = senderBalance - amount;
         balanceOf[recipient] += amount; 
+        emit Transfer(sender, recipient, amount);
         return true;
     }
     function _mint(address to, uint amount) internal {
         require(to != address(0), "ERC20: mint to the zero address");
+
+
         totalSupply += amount;
         balanceOf[to] += amount;
+        
+        emit Transfer(address(0), recipient, amount);
     }
 }

@@ -5,6 +5,7 @@ import { Oracle } from "./Oracle.sol";
 
 contract StableCoin is ERC20{
     
+    error InitialCollateralRatioError(string message, uint256 minimumDepositAmount);
     DepositorCoin public depositorCoin;
     uint256 public feeRatePercentage;
     uint256 public constant INITIAL_COLLATERAL_RATIO_PERCENTAGE = 10;
@@ -24,6 +25,9 @@ contract StableCoin is ERC20{
     }
 
     function burn(uint256 burnStableCoinAmount) external {
+        int256 deficitOrSurplusInUsd = _getDeficitOrSurplusInContractInUsd();
+        require(deficitOrSurplusInUsd >= 0, "STC: Cannot burn while in deficit");
+
         _burn(msg.sender, burnStableCoinAmount);
 
         uint256 refundingEth = burnStableCoinAmount/oracle.getPrice();
@@ -51,7 +55,10 @@ contract StableCoin is ERC20{
 
             uint256 requiredInitialSurplusInUsd = (INITIAL_COLLATERAL_RATIO_PERCENTAGE * totalSupply) /100; 
             uint256 requiredInitialSurplusInEth = requiredInitialSurplusInUsd / usdInEthPrice;
-            require(msg.value >= deficitInEth + requiredInitialSurplusInEth, "STC: Initial collateral ratio not met");
+            if(msg.value < deficitInEth + requiredInitialSurplusInEth){
+                uint256 mintDepositAmount = deficitInEth + requiredInitialSurplusInEth;
+                revert InitialCollateralRatioError("STC: Initial collateral ration not met, minimum is: ",mintDepositAmount);
+            }
 
             uint256 newInitialSurplusInEth = msg.value - deficitInEth;
             uint256 newInitialSurplusInUsd = newInitialSurplusInEth * usdInEthPrice;
@@ -65,6 +72,21 @@ contract StableCoin is ERC20{
 
         uint256 mintDepositorCoinAmount = (msg.value * dpcInUsdPrice) /oracle.getPrice()  ;
         depositorCoin.mint(msg.sender,mintDepositorCoinAmount );
+    }
+
+    function withdrawCollateralBuffer(uint256 burnDepositorCoinAmount) external {
+        require(depositorCoin.balanceOf(msg.sender) >= burnDepositCoinAmount, "STC: Sender has insufficient DPC funds");
+        depositorCoin.burn(msg.sender, burnDepositorCoinAmount);
+        int256 deficitOrSurplusInUsd = _getDeficitOrSurplusInContractInUsd();
+        require(deficitOrSurplusInUsd > 0, "STC: No funds to withdraw");
+        uint256 surplusInUsd = uint256(deficitOrSurplusInUsd);
+        uint256 dpcInUsdPrice = _getDPCinUsdPrice(surplusInUsd);
+        uint256 refundingUsd = burnDepositorCoinAmount / dpcInUsdPrice;
+        uint256 refundingEth = refundingUsd / oracle.getPrice();
+
+        (bool success, ) = msg.sender.call{value: refundingEth}("");
+        require(success, "STC: Withdraw refund transaction failed");
+
     }
 
     function _getDeficitOrSurplusInContractInUsd() private view returns(int256) {
